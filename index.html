@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bộ đếm tụng A Di Đà Phật</title>
+  <style>
+    /* --- Toàn bộ CSS của bạn ở đây --- */
+    .outer-wrapper {
+      text-align: center;
+      margin-top: 40px;
+    }
+
+    .chant-container {
+      display: inline-block;
+      font-family: "Segoe UI", sans-serif;
+      padding: 20px 5px;
+      background: linear-gradient(to right, #fff8f0, #fff0e0);
+      border-radius: 10px;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+      width: 600px;
+      max-width: 100%;
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+
+    .chant-text {
+      color: #ff8800;
+      font-weight: bold;
+      letter-spacing: 4px;
+      margin-bottom: 10px;
+      min-height: 2.5em;
+      white-space: normal;
+      word-break: break-word;
+      transition: font-size 0.3s ease, color 0.3s ease;
+      font-size: 40px;
+    }
+
+    .chant-count {
+      font-size: 1.5em;
+      color: #555;
+      font-weight: bold;
+      height: 1.5em;
+      transition: opacity 0.3s ease;
+    }
+
+    .chant-rounds {
+      font-size: 1em;
+      color: #777;
+      margin-top: 8px;
+      height: 1.5em;
+      transition: opacity 0.3s ease;
+    }
+
+    .controls {
+      margin-top: 20px;
+      font-size: 0.9em;
+      color: #444;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .controls input[type="range"] {
+      width: 180px;
+    }
+
+    .row-group {
+      display: flex;
+      flex-direction: row;
+      gap: 20px;
+    }
+
+    button {
+      padding: 6px 16px;
+      font-size: 0.95em;
+      background-color: #ff8800;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    button:hover {
+      background-color: #e47100;
+    }
+  </style>
+</head>
+<body>
+  <!-- --- Toàn bộ phần HTML hiển thị giao diện --- -->
+  <div class="outer-wrapper">
+    <div class="chant-container">
+      <div id="chant" class="chant-text"></div>
+      <div id="count" class="chant-count"></div>
+      <div id="total-rounds" class="chant-rounds"></div>
+
+      <div class="controls">
+        <div class="row-group">
+          <label><input type="checkbox" id="toggle-count" checked /> Hiện số đếm</label>
+          <label><input type="checkbox" id="toggle-rounds" checked /> Hiện số chuỗi</label>
+        </div>
+
+        <label>Chọn câu niệm:
+          <select id="chant-select">
+            <option value="short">A DI ĐÀ PHẬT</option>
+            <option value="long">NAM MÔ A DI ĐÀ PHẬT</option>
+          </select>
+        </label>
+
+        <label>Chọn màu câu niệm:
+          <input type="color" id="chant-color-picker" value="#ff8800" />
+        </label>
+
+        <label>Độ đậm nhạt số:
+          <input type="range" id="opacity-slider" min="0.1" max="1" step="0.1" value="0.4" />
+        </label>
+
+        <label>Cỡ chữ câu niệm:
+          <input type="range" id="font-size-slider" min="24" max="64" step="2" value="24" />
+        </label>
+
+        <label>
+          Thời gian giữa các từ & chuỗi (giây):
+          <input type="range" id="interval-slider" min="0.3" max="3" step="0.1" value="1" />
+          <span id="interval-label">1.0s</span>
+        </label>
+
+        <button id="pause-button">⏸️ Tạm dừng</button>
+        <button id="reset-button">🔄 Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- --- JavaScript xử lý logic hiển thị và điều khiển --- -->
+  <script>
+    const chantSets = {
+      short: ["A", "DI", "ĐÀ", "PHẬT"],
+      long: ["NAM", "MÔ", "A", "DI", "ĐÀ", "PHẬT"]
+    };
+
+    let chantWords = chantSets["short"];
+    const chantElement = document.getElementById("chant");
+    const countElement = document.getElementById("count");
+    const roundsElement = document.getElementById("total-rounds");
+    const toggleCount = document.getElementById("toggle-count");
+    const toggleRounds = document.getElementById("toggle-rounds");
+    const opacitySlider = document.getElementById("opacity-slider");
+    const fontSizeSlider = document.getElementById("font-size-slider");
+    const resetButton = document.getElementById("reset-button");
+    const pauseButton = document.getElementById("pause-button");
+    const chantSelect = document.getElementById("chant-select");
+    const intervalSlider = document.getElementById("interval-slider");
+    const intervalLabel = document.getElementById("interval-label");
+    const chantColorPicker = document.getElementById("chant-color-picker");
+
+    let wordIndex = 0;
+    let count = 1;
+    let currentLine = [];
+    let totalRounds = 0;
+    let intervalId = null;
+    let isPaused = false;
+
+    intervalSlider.addEventListener("input", () => {
+      intervalLabel.textContent = intervalSlider.value + "s";
+    });
+
+    function getIntervalMs() {
+      return parseFloat(intervalSlider.value) * 1000;
+    }
+
+    function loadState() {
+      const saved = JSON.parse(localStorage.getItem("chantState"));
+      if (saved) {
+        chantWords = chantSets[saved.chantType] || chantSets["short"];
+        chantSelect.value = saved.chantType || "short";
+        wordIndex = saved.wordIndex || 0;
+        count = saved.count || 1;
+        currentLine = saved.currentLine || [];
+        totalRounds = saved.totalRounds || 0;
+        isPaused = saved.isPaused || false;
+        chantElement.textContent = currentLine.join(" ");
+        chantColorPicker.value = saved.chantColor || "#ff8800";
+        chantElement.style.color = chantColorPicker.value;
+        if (toggleCount.checked) countElement.textContent = count;
+        renderRounds();
+      }
+    }
+
+    function saveState() {
+      const state = {
+        chantType: chantSelect.value,
+        wordIndex,
+        count,
+        currentLine,
+        totalRounds,
+        isPaused,
+        chantColor: chantColorPicker.value
+      };
+      localStorage.setItem("chantState", JSON.stringify(state));
+    }
+
+    function renderRounds() {
+      if (toggleRounds.checked) {
+        roundsElement.textContent = `Đã tụng ${totalRounds} chuỗi`;
+        roundsElement.style.opacity = 1;
+      } else {
+        roundsElement.textContent = "";
+      }
+    }
+
+    function scheduleNextChant(delay) {
+      intervalId = setTimeout(updateChant, delay);
+    }
+
+    function updateChant() {
+      if (isPaused) return;
+
+      currentLine.push(chantWords[wordIndex]);
+      chantElement.textContent = currentLine.join(" ");
+
+      if (wordIndex === chantWords.length - 1) {
+        if (toggleCount.checked) {
+          countElement.textContent = count;
+          countElement.style.opacity = opacitySlider.value;
+        } else {
+          countElement.textContent = "";
+        }
+
+        if (count === 10) {
+          totalRounds++;
+          count = 1;
+          renderRounds();
+        } else {
+          count++;
+        }
+
+        saveState();
+
+        setTimeout(() => {
+          if (!isPaused) {
+            chantElement.textContent = "";
+            countElement.textContent = "";
+            currentLine = [];
+            wordIndex = 0;
+            updateChant();
+          }
+        }, getIntervalMs());
+      } else {
+        wordIndex++;
+        saveState();
+        scheduleNextChant(getIntervalMs());
+      }
+    }
+
+    opacitySlider.addEventListener("input", () => {
+      countElement.style.opacity = opacitySlider.value;
+    });
+
+    fontSizeSlider.addEventListener("input", () => {
+      chantElement.style.fontSize = fontSizeSlider.value + "px";
+    });
+
+    chantColorPicker.addEventListener("input", () => {
+      chantElement.style.color = chantColorPicker.value;
+      saveState();
+    });
+
+    toggleRounds.addEventListener("change", renderRounds);
+
+    pauseButton.addEventListener("click", () => {
+      isPaused = !isPaused;
+      pauseButton.textContent = isPaused ? "▶️ Tiếp tục" : "⏸️ Tạm dừng";
+      saveState();
+      if (!isPaused) {
+        updateChant();
+      } else {
+        clearTimeout(intervalId);
+      }
+    });
+
+    resetButton.addEventListener("click", () => {
+      clearTimeout(intervalId);
+      wordIndex = 0;
+      count = 1;
+      currentLine = [];
+      totalRounds = 0;
+      chantElement.textContent = "";
+      countElement.textContent = "";
+      roundsElement.textContent = "";
+      isPaused = false;
+      pauseButton.textContent = "⏸️ Tạm dừng";
+      localStorage.removeItem("chantState");
+      chantWords = chantSets[chantSelect.value];
+      chantElement.style.color = chantColorPicker.value;
+      updateChant();
+    });
+
+    chantSelect.addEventListener("change", () => {
+      chantWords = chantSets[chantSelect.value];
+      resetButton.click();
+    });
+
+    loadState();
+    chantElement.style.color = chantColorPicker.value;
+    if (!isPaused) {
+      updateChant();
+    }
+  </script>
+</body>
+</html>
